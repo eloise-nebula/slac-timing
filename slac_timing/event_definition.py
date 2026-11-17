@@ -171,19 +171,27 @@ class EventDefinition(Buffer):
         time.sleep(_MASK_SETTLE_S)
 
     def _get_mask_cache(self) -> dict:
-        names = self.pvs.pnbn_names.get_many(as_string=True)
-        if not all(n is not None for n in names):
+        """Masks are identified by a string, and have an associated int.
+        There is a 1-1 relationship PNBN:SYS0:X:NAME -> PNBN:SYS0:X:BITP
+                                           Mask Name -> Mask Int
+        """
+
+        def _get_many(pvs):
+            out = pvs.get_many(as_string=True)
+            invalid_indicies = [i for i, o in enumerate(out) if not o]
+            if not invalid_indicies:
+                return out
             msg = "PV timed out."
-            for i in range(0, len(names)):
-                msg += f"\npv={self.pvs.pnbn_names[i + 1].pvname}, value={names[i]}"
+            for i in invalid_indicies:
+                msg += f"\npv={pvs[i + 1].pvname}, value={out[i]}"
             raise ReservationError(msg)
-        positions = self.pvs.pnbn_positions.get_many()
-        if not all(n is not None for n in positions):
-            msg = "PV timed out."
-            for i in range(0, len(names)):
-                msg += f"\npv={self.pvs.pnbn_positions[i + 1].pvname}, value={positions[i]}"
-            raise ReservationError(msg)
-        return dict(zip(names, positions))
+
+        return dict(
+            zip(
+                _get_many(self.pvs.pnbn_names),
+                map(int, _get_many(self.pvs.pnbn_positions)),
+            )
+        )
 
 
 def _to_int32(word: int) -> int:
